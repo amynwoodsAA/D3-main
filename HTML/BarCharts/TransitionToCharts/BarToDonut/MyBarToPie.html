@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style type="text/css">
+svg {
+    font-family: "Helvetica Neue", Helvetica;
+}
+
+.line {
+    fill: none;
+    stroke: #000;
+    stroke-width: 2px;
+}
+</style>
+<body>
+    <!-- load the d3.js library -->    	
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+
+    <div>
+        <button onclick="toPie()">To Pie</button>
+    </div>
+
+
+    <script>
+        // Define the SVG element
+        let svg = d3.select("body")
+        .append("svg")
+        .attr("width", 400)
+        .attr("height", 400);
+
+        // Define the data
+        let data = [10, 20, 30, 40];
+
+        // Define the scales
+        let xScale = d3.scaleBand()
+        .range([0, 400])
+        .domain(["A", "B", "C", "D"]);
+        
+        let yScale = d3.scaleLinear()
+        .range([400, 0])
+        .domain([0, 40]);
+
+        // Define the arc generator
+        var arcGenerator = d3.arc()
+        .innerRadius(0)
+        .outerRadius(200);
+
+        // Define the pie generator
+        var pieGenerator = d3.pie()
+        .value(function(d) { return d; });
+
+        // Draw the bars
+        let bars = svg.selectAll("rect")
+            .data(data)
+            .enter()
+            .append("rect")
+                .attr("x", function(d, i) { return xScale("ABCD"[i]); })
+                .attr("y", function(d) { return yScale(d); })
+                .attr("width", xScale.bandwidth())
+                .attr("height", function(d) { return 400 - yScale(d); });
+
+        function toPie(){
+            // Transition the bars to slices
+            bars.transition()
+            .duration(1000)
+            .attrTween("d", function(d) {
+                var start = {startAngle: 0, endAngle: 0};
+                console.log(" d ", d)
+                console.log("pieGenerator ", pieGenerator([d]))
+                var interpolate = d3.interpolate([start], pieGenerator([d]));
+                return function(t) {
+                    console.log("t ", t);
+                    console.log(" interpolate ", interpolate(t))
+                    console.log("arc generator ", arcGenerator(interpolate(t)[0]) )
+                    return arcGenerator(interpolate(t)[0]);
+                };
+            })
+            //.remove();
+        }
+
+    </script>
+</body>
+
+
+</html>

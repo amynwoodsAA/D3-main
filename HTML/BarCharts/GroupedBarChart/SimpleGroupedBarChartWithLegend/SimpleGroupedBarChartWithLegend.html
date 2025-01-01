@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style> /* set the CSS */
+
+    .axisLabel {
+        font: 14px sans-serif;
+        text-anchor: middle;
+    }
+
+    /* svg {
+        border: 1px solid black;
+    } */
+    .legendText {
+        font: 12px sans-serif;
+    }
+
+    .legendTextTitle {
+        font: 14px sans-serif;
+        text-decoration: underline;
+        text-anchor: left;
+    }
+
+    #legendDiv {
+        overflow: auto;
+        border: 1px solid;
+        border-color: rgb(70, 68, 68);
+        border-right: none;
+        border-width: 1px;
+
+        float:right;
+        position: relative;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+
+    #groupedBarChartDiv{
+        float: left;
+    }
+
+    #groupedBarChart{
+        border: 1px solid;
+        border-color: black;
+
+    }
+
+</style>
+
+<body>
+     <!-- load the d3.js library -->    	
+     <script src="https://d3js.org/d3.v6.min.js"></script>
+
+     <script>
+        // set the dimensions of the graph
+        let width = 500;
+        let height = 500;
+        let margin = 0;
+
+        //Draw divs
+        let div =  d3.select("body").append("div").attr("id", "groupedBarChart");
+        let divGroupedBarChart = div.append("div").attr("id", "groupedBarChartDiv");
+        let divLegend = div.append("div").attr("id", "legendDiv");
+
+        let legendWidth = width * 0.3;
+        let legendHeight = height;
+        let barSVGWidth = width * 0.7;
+        let barSVGHeight  = height;
+
+        divLegend
+            .style("width", legendWidth +'px')
+            .style("height", legendHeight +'px')
+
+        divGroupedBarChart
+            .style("width", barSVGWidth +'px')
+            .style("height", barSVGHeight +'px')
+
+        let svgBar = divGroupedBarChart.append("svg")
+            .attr("id", "barSVG")
+            .attr("width", barSVGWidth)
+            .attr("height", barSVGHeight)
+                .append("g")
+                    .attr("transform", "translate(" + (margin) + ",0)");
+
+        let svgLegend = divLegend.append("svg")
+            .attr("id", "legendSVG")
+            .attr("width", 10000)
+            .attr("height", 10000);
+
+        //Draw legend
+         const legend = svgLegend.append('g')
+            .attr('class', 'legend');
+
+        //Draw legend Title
+        let legendTitle = legend.append('g')
+            .attr("id", "legendTitle");
+
+        //Draw legend content
+        let legendContent = legend.append('g')
+            .attr("id", "legendContent");
+
+
+
+        let fileName = 'data2.csv';
+
+        let xAxis = svgBar.append("g")
+            .attr("id", "xAxis");
+
+        let xAxisLabel = svgBar.append("g")
+            .attr("id", "xAxisLabel")
+            .attr("class", "axisLabel")
+            .append('text')
+            .text('');
+
+        let yAxis = svgBar.append("g")
+            .attr("id", "yAxis");
+
+        let barsG = svgBar.append("g").attr("id", "barsGroup");
+
+        let x = d3.scaleBand()
+            .range([0, barSVGWidth - margin])
+            .padding([0.1]);
+
+        let xSubGroup = d3.scaleBand()
+            .padding([0.05]);
+
+        let y = d3.scaleLinear();
+     
+        function getMaxY(data, valueTitle){
+            let maxY = 0;
+            data.forEach(function(d,i){
+                if(maxY < +(d[valueTitle])){
+                    maxY = +(d[valueTitle]);
+                }
+            });
+            return maxY;
+        }
+
+        function createBarGroups(barsG, x, groupTitle, groups){
+            let barsGroups = barsG
+                .selectAll("g")
+                // Enter in data loop group per group
+                .data(groups)
+                .join("g")
+                    .attr("transform", function(d,i){
+                        //return "translate(" + x(d['group']) + ",0)";
+                        return "translate(" + x(d) + ",0)";
+                    })
+                    .attr("id",function(d,i){
+                        return "group_" + d;
+                    });
+            return barsGroups;
+        }
+
+        function drawRectangles(barsGroup, subGroups, xSubGroup, y, height, color, xAxisLabelHeight, xAxisHeight, data, groupTitle, subGroupTitle, valueTitle, heightValue, yRectShift){
+            barsGroup
+                .selectAll("rect")
+                .data(function(d) { 
+                    return subGroups.map(function(key) { 
+                        //Get Value
+                        let value = 0;
+                        for(let i = 0; i < data.length; i++){
+                            if(data[i][groupTitle] !== d){
+                                continue;
+                            }
+                            if(data[i][subGroupTitle] === key){
+                                value = data[i][valueTitle];
+                                break;
+                            }
+                        }
+
+                        return {key: key, value: value}; 
+                    }); 
+                })
+                .join("rect")
+                    .attr("x", function(d,i){
+                        return xSubGroup(d.key);
+                    })
+                    .attr("y", function(d,i){
+                        return y(d.value) + yRectShift;
+                    })
+                    .attr("width", xSubGroup.bandwidth())
+                    .attr("height", function(d,i){
+                        //return height- xAxisLabelHeight - xAxisHeight - y(d.value);
+                        return heightValue - y(d.value);
+                    })
+                    .attr("fill", function(d,i){
+                        return color(d.key);
+                    });
+        }
+
+        function adjustLegendContentText(textLegend, sizeRect, startingHeight, textHeight){
+            let maxTextLength = 0;
+            let maxlegendHeight = 0;
+            textLegend
+                .attr("y", function(d,i){
+                    if(this.getComputedTextLength() > maxTextLength){
+                        maxTextLength = this.getComputedTextLength();
+                    }
+                    let yShift = sizeRect;
+                    maxlegendHeight = startingHeight + yShift - (textHeight) + i*(sizeRect+5);
+                    return startingHeight + yShift - (textHeight) + i*(sizeRect+5);
+                });
+
+            return [maxTextLength, maxlegendHeight];
+        }
+
+        function resetLegendSVGWidthHeight(maxWidthLegendSVG, maxlegendHeight, textHeight, legendTitleHeight){
+            d3.select("#legendSVG")
+                .attr("width", maxWidthLegendSVG )
+                .attr("height", maxlegendHeight + textHeight + legendTitleHeight )
+        }
+
+        function checkLegendHeight(maxlegendHeight, textHeight, legendTitleHeight, legendHeight, divLegend){
+            if(maxlegendHeight + textHeight + legendTitleHeight < legendHeight){
+                divLegend
+                    .style("height",'')
+            }
+        }
+
+        function centerLegendTitle(legendTitle, rectMargin, legendTitleHeight, legendTitleShift){
+            legendTitle.select("text")
+                .attr("x", rectMargin)
+                //.attr("x", maxWidthLegendSVG/2 )
+                .attr("y", legendTitleHeight - (legendTitleShift));
+        }
+
+        function shiftLegendContent(legendContent, xTransform, yTransform){
+            legendContent
+                .attr("transform", "translate(" + xTransform + "," + yTransform + ")");
+        }
+
+        function checkTitleLongerThanSVG(legendTitle, maxWidthLegendSVG, rectMargin){
+            let legendTitleLength = legendTitle.select("text").node().getComputedTextLength();
+            console.log("legendTitleLength ", legendTitleLength);
+            console.log("maxWidthLegendSVG", maxWidthLegendSVG);
+
+            if(legendTitleLength + rectMargin > maxWidthLegendSVG){
+                maxWidthLegendSVG = legendTitleLength + rectMargin*2;
+                // legendTitle.select("text")
+                //     .attr("x", maxWidthLegendSVG/2 )
+                d3.select("#legendSVG")
+                    .attr("width", maxWidthLegendSVG )
+            }
+        }
+        
+        function drawLegend(legendTitle, color, subGroups, subGroupTitle){
+            //Draw legend title
+            legendTitle
+                .append("text")
+                .attr("class", "legendTextTitle")
+                .text(subGroupTitle.toUpperCase());
+
+            //Data bind for content
+            const lg = legendContent.selectAll('g')
+                .data(subGroups)
+                .join('g');
+
+            let sizeRect = 12;
+            let startingHeight = 0;
+            let startingLeftRect = sizeRect/2;
+
+            //Draw legend content rectangles
+            lg.append("rect")
+                .attr("fill", function(d,i){
+                    return color(d);
+                })
+                .attr('x',startingLeftRect)
+                .attr("y", function(d,i){ 
+                    return startingHeight + i*(sizeRect+5)
+                })
+                .attr('width', sizeRect)
+                .attr('height', sizeRect)
+                .attr('stroke', 'black');
+
+            //Draw legend content text
+            let textLegend = lg.append('text')
+                .attr("class", "legendText")
+                .attr('x', sizeRect + (sizeRect/2) + startingLeftRect)
+                .text(function(d,i){
+                    return d;
+                });
+
+            let textHeight = lg.selectAll('text').node().getBBox().height + lg.selectAll('text').node().getBBox().y;
+            let [maxTextLength, maxlegendHeight] = adjustLegendContentText(textLegend, sizeRect, startingHeight, textHeight);
+
+            let legendTitleHeight =  legendTitle.select("text").node().getBBox().height;
+            let legendTitleY = legendTitle.select("text").node().getBBox().y;
+            let legendTitleShift = legendTitleHeight + legendTitleY;
+            let maxWidthLegendSVG =  maxTextLength + sizeRect + (sizeRect/2) + startingLeftRect;
+            let rectMargin = sizeRect/2;
+
+            resetLegendSVGWidthHeight(maxWidthLegendSVG, maxlegendHeight, textHeight, legendTitleHeight + rectMargin + rectMargin)
+            checkLegendHeight(maxlegendHeight, textHeight, legendTitleHeight, legendHeight, divLegend)
+            centerLegendTitle(legendTitle, rectMargin, legendTitleHeight, legendTitleShift);
+            shiftLegendContent(legendContent, 0, legendTitleHeight + rectMargin);
+            //Check title is longer then svg
+            checkTitleLongerThanSVG(legendTitle, maxWidthLegendSVG, rectMargin);
+
+        }
+
+        //Read the csv file
+        d3.csv(fileName).then(function(data) {
+            console.log("data ", data)
+            console.log("data columns ", data.columns)
+            let groupTitle = data.columns[0];
+            let subGroupTitle = data.columns[1];
+            let valueTitle = data.columns[2];
+            let subGroupsAll = [];
+            let groupsAll = [];
+
+            data.forEach(function(d,i){
+                subGroupsAll.push(d[subGroupTitle]);
+                groupsAll.push(d[groupTitle]);
+            })
+
+            let groups = [...new Set(groupsAll)];
+            let subGroups = [...new Set(subGroupsAll)];
+
+            // // List of subGroups = header of the csv files
+            // const subGroups = data.columns.slice(1);
+            console.log("subGroups ", subGroups)
+            
+            // // List of groups = value of the first column called group -> I show them on the X axis
+            // const groups = data.map(d => d.group);
+            console.log("groups ", groups);
+
+            // color palette = one color per subgroup
+            const color = d3.scaleOrdinal()
+                .domain(subGroups)
+                .range(['#e41a1c','#377eb8','#4daf4a']);
+
+            drawLegend(legendTitle, color, subGroups, subGroupTitle);
+
+
+            // //Draw x axis Label
+            xAxisLabel
+                .attr("y", barSVGHeight)
+                .attr("x", (barSVGWidth - margin)/2)
+                .text(groupTitle)
+            let xAxisLabelHeight = xAxisLabel.node().getBBox().height;
+            let xAxisLabelY = xAxisLabel.node().getBBox().y;
+            let xAxisLabelShiftY = 0;
+            if(xAxisLabelHeight + xAxisLabelY > height){
+                xAxisLabelShiftY = xAxisLabelHeight + xAxisLabelY  - height;
+            }
+            xAxisLabel.attr("y", height - xAxisLabelShiftY);
+
+            
+            // Add X axis
+            x.domain(groups)
+            
+            xAxis.call(d3.axisBottom(x));
+            let xAxisHeight =xAxis.node().getBBox().height;
+            xAxis.attr("transform", "translate(0," + (height - xAxisLabelHeight - xAxisHeight ) + ")");
+
+            //Get max y 
+            let maxY =  getMaxY(data, valueTitle);
+            console.log("maxY ", maxY );
+
+            // Add Y axis
+            y.domain([0, maxY])
+                .range([ height - xAxisLabelHeight - xAxisHeight, 0 ]);
+            yAxis.call(d3.axisLeft(y));
+
+            console.log("here ",  yAxis.node().getBBox().y )
+            let heightValue = height- xAxisLabelHeight - xAxisHeight;
+            let yRectShift = 0;
+
+            if( yAxis.node().getBBox().y < 0){
+                y.range([ height - xAxisLabelHeight - xAxisHeight +  yAxis.node().getBBox().y, 0 ]);
+                heightValue =  height - xAxisLabelHeight - xAxisHeight +  yAxis.node().getBBox().y;
+                yAxis.call(d3.axisLeft(y));
+                yAxis.attr("transform", "translate(0," +  yAxis.node().getBBox().y * -1 + ")");
+                yRectShift = yAxis.node().getBBox().y * -1;
+            }
+
+            //Adjust x axis based on y axis width
+            let yAxisWidth = yAxis.node().getBBox().width;
+            svgBar.attr("transform", "translate(" + (yAxisWidth) + ",0)");
+            x.range([0, barSVGWidth - yAxisWidth])
+            xAxis.call(d3.axisBottom(x));
+            xAxisLabel
+                .attr("x", (barSVGWidth - yAxisWidth)/2)
+
+            // Another scale for subgroup position
+            xSubGroup
+                .domain(subGroups)
+                .range([0, x.bandwidth()]);
+
+            let barsGroup = createBarGroups(barsG, x, groupTitle, groups);
+            drawRectangles(barsGroup, subGroups, xSubGroup, y, height, color, xAxisLabelHeight, xAxisHeight, data, groupTitle, subGroupTitle, valueTitle, heightValue, yRectShift);
+
+            div
+                .style("width", width + 2 +'px')
+                .style("height", height + 0 +'px')
+        });
+
+
+     </script>
+</body>

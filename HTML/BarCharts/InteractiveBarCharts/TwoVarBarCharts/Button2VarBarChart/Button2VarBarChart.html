@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style> /* set the CSS */
+
+    .bar { 
+        fill: steelblue; 
+    }
+
+    .axisLabel {
+        font: 16px sans-serif;
+    }
+
+    .title {
+        font: 40px sans-serif;
+        text-anchor: middle;
+        text-decoration: underline;
+    }
+
+    svg {
+        border: 1px solid black;
+    }
+
+</style>
+<body>
+	
+    <!-- load the d3.js library -->    	
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <script src="live.js"></script>
+
+    <button onclick="update('sales')">Variable 1</button>
+    <button onclick="update('sales2')">Variable 2</button>
+
+    <script>
+        // set the dimensions of the graph
+        let width = 500;
+        let height = 500;
+
+        let div = d3.select("body").append("div"); 
+        // append the svg object to the body of the page
+        // append a 'group' element to 'svg'
+        let svg = div.append("svg")
+            .attr("width", width)
+            .attr("height", height)
+                .append("g")
+
+        //Draw initial title
+        let title = svg.append("text")
+            .attr("id", "title")
+            .attr("class", "title")
+            .attr("x", (width/2))
+            .attr("y", 0)
+            .text("PER");
+
+        //Create g grouping for hidden x and y axis
+        let xAxisHidden = drawHiddenGGroup(svg, "xAxisHidden");
+        let yAxisHidden = drawHiddenGGroup(svg, "yAxisHidden");
+
+        //Draw hidden x axis label
+        let xAxisLabelHidden =  svg.append("text")
+            .attr("id", "xAxisLabelHidden").attr("class", "axisLabel")
+            .attr("x", width/2)
+            .attr("y", height)
+            .style("text-anchor", "middle")
+            .style("opacity", "0")
+            .text("Temporary");
+        //Draw x axis label
+        let xAxisLabel = svg.append("text").attr("id", "xAxisLabel").attr("class", "axisLabel");
+
+        //Create g for x axis 
+        let xAxis = svg.append("g").attr("id", "xAxis")
+            .attr("transform", "translate(0," + height + ")");
+
+        //Create g for y axis 
+        let yAxis = svg.append("g").attr("id", "yAxis");
+
+        //Create g for bars
+        let barsG = svg.append('g').attr("id", "bars");
+
+        function drawHiddenGGroup(svg, id){
+            /*
+                --------------------------- drawHiddenGGroup ---------------------------
+                The function appends a 'g' group to given svg as a hidden axis for 
+                rendering purposes
+
+                --------------------------- Parameters ---------------------------
+                svg : D3 Object, the g group of an svg that we are drawing in
+
+                --------------------------- Return ---------------------------
+                D3 Object, a 'g' group representing the hidden Axis
+            */
+
+            let hidden = svg.append("g")
+                .style("opacity", 0)
+                .attr("id", id);
+            return hidden;
+        }
+
+        function shrinkTitle(svg, titleBBoxY){
+            /*
+                --------------------------- shrinkTitle ---------------------------
+                The function shrinks the title to fit within the svg given
+
+                --------------------------- Parameters ---------------------------
+                svg : D3 Object, the g group of an svg that we are drawing in
+                titleBBoxY : Number, the y attribute of the title to shift
+            */
+
+            let fontSizeTitle = 40;
+            while(svg.select("#title").node().getBBox().x < 0){
+                fontSizeTitle--;
+                svg.select("#title")
+                    .attr("y", 0 )
+                    .style("font-size", fontSizeTitle + "px");
+                titleBBoxY = svg.select("#title").node().getBBox().y;
+
+                svg.select("#title").attr("y", titleBBoxY * -1)
+            }
+        }
+
+        function drawTitle(group, value, svg, width, height){
+            /*
+                --------------------------- drawTitle ---------------------------
+                The function draws the title by starting with temporary size and 
+                then maximizes the font size to make the title fit within the bounds
+
+                --------------------------- Parameters ---------------------------
+                group : String, the group name in csv file
+                value : String, th value name in th csv file
+                svg : D3 Object, the g group of an svg that we are drawing in
+                width : Number, the width of the svg
+                height : Number, the height of the svg
+            */
+
+            let startingFontSize = 40;
+            //Add Temporary Title
+            svg.select("#title")
+                .attr("x", (width/2))
+                .attr("y", 0)
+                .style("font-size", startingFontSize + "px")
+                .attr("opacity", 0)
+                .text("PER");
+            let titleBBoxY = svg.select("#title").node().getBBox().y;
+
+            //Add a title
+            svg.select("#title")
+                .attr("x", (width/2) )
+                .attr("y", titleBBoxY * -1  )
+                .style("font-size", startingFontSize + "px")
+                .text(value + " PER " + group);
+
+            //Shrink title if needed
+            shrinkTitle(svg, titleBBoxY);
+        }
+
+        function shiftXAxisLabel(svg, width, height, group, xAxisLabelHidden){
+            /*
+                --------------------------- shiftXAxisLabel ---------------------------
+                The function shifts the hidden x axis label y value to appropriate spot.
+                Accounts for hanging letters that would oterwise be out of bounds.
+
+                --------------------------- Parameters ---------------------------
+                svg : D3 Object, the g group of an svg that we are drawing in
+                width : Number, the width of the svg
+                height : Number, the height of the svg
+                group : String, the group name in csv file
+                xAxisLabelHidden : D3 Object, a 'g' group representing the hidden Axis
+
+                --------------------------- Return ---------------------------
+                D3 Object, a 'g' group representing the hidden Axis
+            */
+
+            //Number of pixels from top of text to bottom
+            let xAxisLabelBottom = xAxisLabelHidden.node().getBBox().y + xAxisLabelHidden.node().getBBox().height;
+
+            let xAxisLabelShift = 0;
+            if(xAxisLabelBottom > height ){
+                xAxisLabelShift = xAxisLabelBottom - height;
+            }
+
+            xAxisLabelHidden
+                .attr("y", height - xAxisLabelShift);
+
+            return xAxisLabelHidden;
+        }
+
+        function checkOverlapLabels(labelBounds, xAxisHiddenText){
+            /*
+                --------------------------- checkOverlapLabels ---------------------------
+                The function determines if the x axis labels overlap each other
+
+                --------------------------- Parameters ---------------------------
+                labelBounds :  Array of Arrays, array for each text tick label, each has an array
+                    with the min x coordinate and max x coordinate of the text object
+                xAxisHiddenText : D3 Object, the text objects of the hidden x axis
+
+                --------------------------- Return ---------------------------
+                Boolean, true if labels overlap, otherwise false
+            */
+            let overlapFound = false;
+            for(let i = 0; i < labelBounds.length; i++){
+                if(i !== labelBounds.length - 1){
+                    if(labelBounds[i+1][0] < labelBounds[i][1]){
+                        overlapFound = true;
+                        //console.log("Found overlap label for ",  xAxisHiddenText.nodes()[i],  " and ", xAxisHiddenText.nodes()[i+1] )
+                        break;
+                    }
+                }
+            }
+
+            return overlapFound;
+        }
+
+        function fixOverlap(xAxisHiddenText, svg){
+            /*
+                --------------------------- fixOverlap ---------------------------
+                The function rotates the labels until no more overlap and labels 
+                are not crossing the x axis bounds
+
+                --------------------------- Parameters ---------------------------
+                xAxisHiddenText : D3 Object, the text objects of the hidden x axis
+                svg : D3 Object, the g group of an svg that we are drawing in
+
+                --------------------------- Return ---------------------------
+                Number, the number of degrees rotated
+            */
+            let degree = 45;
+            const y = xAxisHiddenText.attr("y");
+            let degreeRadians = degree * (Math.PI/180)
+            let xNew = (xAxisHiddenText.attr("y"))*(Math.sin(-degreeRadians));
+            let yNew = -(xAxisHiddenText.attr("y"))*(Math.cos(-degreeRadians));
+
+            xAxisHiddenText
+                .style("text-anchor", "end")
+                .attr("transform", "translate("+ xNew * (1.5) + "," + (yNew * (1.5) + +(y)) +")rotate(-" + degree + ")");
+
+            //Check if x axis is out of bounds
+            let outOfBounds = false;
+            if(svg.select("#xAxisHidden").node().getBBox().x < 0){
+                outOfBounds = true;
+            }
+
+            while(outOfBounds){
+                degree+= 0.1;
+                const y = xAxisHiddenText.attr("y");
+                let degreeRadians = degree * (Math.PI/180)
+                let xNew = (xAxisHiddenText.attr("y"))*(Math.sin(-degreeRadians));
+                let yNew = -(xAxisHiddenText.attr("y"))*(Math.cos(-degreeRadians));
+
+                xAxisHiddenText
+                    .style("text-anchor", "end")
+                    .attr("transform", "translate("+ xNew * (1.5) + "," + (yNew * (1.5) + +(y)) +")rotate(-" + degree + ")");
+
+                outOfBounds = false;
+                if(svg.select("#xAxisHidden").node().getBBox().x < 0){
+                    outOfBounds = true;
+                }
+            }
+
+            return degree;
+        }
+
+        function drawBars(barsG, data, height, xAxisLabelHeight, xAxisHeight, group, value, x, y){
+            /*
+                --------------------------- drawBars ---------------------------
+                The function draws the new set of bars
+
+                --------------------------- Parameters ---------------------------
+                barsG : D3 Object, the g group of an svg that contains bars
+                data : Array of Objects
+                height : Number, the max height of the svg
+                xAxisLabelHeight : Number, the height of the x axis label
+                xAxisHeight : Number, the height of the x axis
+                group : String, the group name in csv file
+                value : String, th value name in th csv file
+                x : D3 Scale Function, the function used for x axis scale
+                y : D3 Scale Function, the function used for y axis scale
+            */
+            const bars = barsG.selectAll("rect")
+                    .data(data);
+
+            bars.join("rect")
+                .attr("class", "bar")
+                .transition()
+                .duration(1000)
+                    .attr("x", function(d) { return x(d[group]); })
+                    .attr("width", x.bandwidth())
+                    .attr("y", function(d) { return y(+d[value]); })
+                    .attr("height", function(d) { 
+                        return height - xAxisLabelHeight - xAxisHeight - y(+d[value]); 
+                    });
+        }
+
+        function getLabelBounds(xAxisHiddenText){
+            /*
+                --------------------------- getLabelBounds ---------------------------
+                The function gets the rect bound for each x axis tick label
+
+                --------------------------- Parameters ---------------------------
+                xAxisHiddenText : D3 Object, the text objects of the hidden x axis
+
+                --------------------------- Return ---------------------------
+                Array of Arrays, array for each text tick label, each has an array
+                with the min x coordinate and max x coordinate of the text object
+            */
+            let labelBounds = [];
+            xAxisHiddenText.nodes().forEach(function(d,i){
+                    labelBounds.push([d.getBoundingClientRect().x, d.getBoundingClientRect().x + d.getBoundingClientRect().width] );
+            })
+            return labelBounds;
+        }
+
+        function rotateXAxisLabels(xAxis, x, height, xAxisLabelHeight, xAxisHeight, degree, xAxisHidden){
+            /*
+                --------------------------- rotateXAxisLabels ---------------------------
+                The function rotates the visible x axis labels a certain degree given
+
+                --------------------------- Parameters ---------------------------
+                xAxis : D3 Object, the g group of an svg that contains x axis
+                x : D3 Scale Function, the function used for x axis scale
+                xAxisLabelHeight : Number, the height of the x axis label
+                xAxisHeight : Number, the height of the x axis
+                degree : Number, the number of degrees to turn the tick labels
+                xAxisHidden : D3 Object, the g group of an svg that contains hidden
+                    x axis
+            */
+            let degreeRadians = degree * (Math.PI/180)
+            let xNew = (xAxisHidden.selectAll("text").attr("y"))*(Math.sin(-degreeRadians));
+            let yNew = -(xAxisHidden.selectAll("text").attr("y"))*(Math.cos(-degreeRadians));
+
+            xAxis.transition().duration(1000).call(d3.axisBottom(x))
+                .attr("transform", "translate(0," + (height - xAxisLabelHeight - xAxisHeight) + ")")
+                .selectAll('text')
+                    .style("text-anchor", "end")
+                    .attr("transform", "translate("+ (xNew * (1.5)) + "," + ( (yNew * (1.5)) + (+(xAxisHidden.selectAll("text").attr("y"))) ) +")rotate(-" + degree + ")");
+        }
+
+        function translateXAxis(xAxis, height, xAxisLabelHeight, xAxisHeight, x){
+            /*
+                --------------------------- translateXAxis ---------------------------
+                The function translates the visible x axis labels to y value
+
+                --------------------------- Parameters ---------------------------
+                xAxis : D3 Object, the g group of an svg that contains x axis
+                height : Number, the max height of the svg
+                xAxisLabelHeight : Number, the height of the x axis label
+                xAxisHeight : Number, the height of the x axis
+                x : D3 Scale Function, the function used for x axis scale
+            */
+            xAxis.transition().duration(1000)
+                .attr("transform", "translate(0," + (height-xAxisLabelHeight - xAxisHeight) + ")")
+                .call(d3.axisBottom(x));
+        }
+
+        function update(selectedVar){
+            console.log("-----------------UPDATING ", selectedVar);
+            //TODO: Read Columns first row for group and value
+            let group = 'salesperson';
+            let value = 'sales';
+            let fileName = 'salesTest.csv';
+            if(selectedVar === "sales2"){
+                group = 'Family';
+                value = '# times to Disneyland';
+                fileName = 'salesTest2.csv';
+            }
+
+            //Draw the title at the top of the svg
+            drawTitle(group, value, svg, width, height);
+
+            //Reset hidden a xaxis label to bottom center
+            xAxisLabelHidden
+                .attr("x", width/2)
+                .attr("y", height);
+
+            //Shifts the hidden x axis label in y direction if needed
+            xAxisLabelHidden = shiftXAxisLabel(svg, width, height, group, xAxisLabelHidden);
+
+            let xAxisLabelHeight = svg.select("#xAxisLabelHidden").node().getBBox().height;
+            let titleHeight = svg.select("#title").node().getBoundingClientRect().height;
+
+            //Read the csv file
+            d3.csv(fileName).then(function(data) {
+                //Define y axis scale
+                let y = d3.scaleLinear()
+                    .range([(height - xAxisLabelHeight ), titleHeight])
+                    .domain([0, d3.max(data, function(d) { return +d[value]; })]);
+
+                //Draw hidden y axis
+                yAxisHidden.call(d3.axisLeft(y)).attr("opacity", 1);
+
+                //Adjust the y axis range based on title and y axis overlap
+                let maxWidthY = svg.select("#yAxisHidden").node().getBBox().width;
+                let yAxisYShift = svg.select("#title").node().getBBox().height - svg.select("#yAxisHidden").node().getBBox().y;
+                y.range([(height - xAxisLabelHeight ), titleHeight + yAxisYShift])
+
+                //Define x scale
+                let x = d3.scaleBand()
+                    .domain(data.map(function(d) { return d[group]; }))
+                    .range([0, width - maxWidthY])
+                    .padding(0.1);
+
+                //Get the x axis label bounds
+                let labelBounds = [];
+                let xAxisHiddenText = xAxisHidden.call(d3.axisBottom(x))
+                    .selectAll("text");
+                labelBounds = getLabelBounds(xAxisHiddenText);
+
+                //Check if labels overlap each other
+                let overlapFound = checkOverlapLabels(labelBounds, xAxisHiddenText);
+                let degree = 0;
+
+                if(overlapFound){
+                    degree = fixOverlap(xAxisHiddenText, svg);
+                }
+
+                //Redefine y axis with the new x axis height
+                let xAxisHeight =  svg.select("#xAxisHidden").node().getBBox().height;
+                y.range([(height - xAxisLabelHeight - xAxisHeight ), titleHeight + yAxisYShift]);
+                y.domain([0, d3.max(data, function(d) { return +d[value]; })]);
+                yAxisHidden.call(d3.axisLeft(y)).attr("opacity", 1);
+
+                maxWidthY = svg.select("#yAxisHidden").node().getBBox().width;
+                x.range([0, width - maxWidthY]);
+
+                if(overlapFound){
+                    rotateXAxisLabels(xAxis, x, height, xAxisLabelHeight, xAxisHeight, degree, xAxisHidden);
+                }
+                else{
+                    translateXAxis(xAxis, height, xAxisLabelHeight, xAxisHeight, x);
+                }
+
+                //Draw the visible y axis
+                yAxis.transition().duration(1000).call(d3.axisLeft(y));
+                //Shift the entire bar chart to show y axis labels
+                svg.transition().duration(1000).attr("transform", "translate(" + (maxWidthY) +  "," + 0 + ")");
+
+                //Append the rectangles for the bar chart
+                drawBars(barsG, data, height, xAxisLabelHeight, xAxisHeight, group, value, x, y);
+
+                //Draw x axis label
+                let xAxisLabelShiftY = xAxisLabelHidden.attr("y");
+                xAxisLabel
+                    .attr("x", width/2 - maxWidthY)
+                    .attr("y", xAxisLabelShiftY)
+                    .style("text-anchor", "middle")
+                    .transition()
+                    .duration(1000)
+                        .text(group);
+
+                //Adjust title and increase opacity
+                svg.select("#title")
+                    .attr("x", (width/2) - maxWidthY)
+                    .transition()
+                    .duration(1000)
+                        .attr("opacity", 1)    
+            })
+        }
+
+        update('sales2');
+    </script>
+</body>
