@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style> /* set the CSS */
+    .axisLabel {
+        font: 16px sans-serif;
+    }
+</style>
+<body>
+	
+    <!-- load the d3.js library -->    	
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <script src="live.js"></script>
+
+    <script>
+        // set the dimensions of the graph
+        let width = 500;
+        let height = 500;
+
+        let div = d3.select("body").append("div");
+                
+        // append the svg object to the body of the page
+        // append a 'group' element to 'svg'
+        // moves the 'group' element to the top left margin
+        let svg = div.append("svg")
+            .attr("width", width)
+            .attr("height", height)
+        .append("g")
+            .attr("transform", "translate("+ width/2 + "," + height/2 + ")");
+
+        const radius = Math.min(width, height) / 2;
+        let donutHoleRadius = radius * 0.5;
+        //var color = d3.scaleOrdinal(d3.schemePaired );
+        let color = d3.scaleOrdinal(['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe', '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3', '#808000', '#ffd8b1', '#000075', '#808080', '#ffffff', '#000000']);
+
+        let arc = d3.arc()
+            .innerRadius(donutHoleRadius)         // This is the size of the donut hole
+            .outerRadius(radius);
+
+        let group = 'salesperson';
+        let value = 'sales';
+        let fileName = 'salesTest.csv';
+
+        function calculateTotal(data){
+            let total = 0;
+            data.forEach(function(d,i){
+                total += (+(d[value]));
+            });
+            return total
+        }
+
+        function resetMiddleLabel(svg, textValue){
+            svg.select("#middleLabel")
+                .attr("y", 0)
+                .style("font-size", "16px")
+                .attr("opacity", 0)
+                .text(textValue);
+        }
+
+        function resetMiddleLabelValueOver(svg, middleLabelHeight, textValue){
+            svg.select("#middleLabelValue")
+                .attr("text-anchor", "middle")
+                .style("font-size", svg.select("#middleLabel").style("font-size"))
+                .attr("y", (middleLabelHeight*-1) + svg.select("#middleLabel").node().getBBox().height )
+                .attr("opacity", 0)
+                .text(textValue)
+        }
+
+        function resetLabelArc(svg, d, group, donutHoleRadius, value){
+            resetMiddleLabel(svg, d.data[group]);
+            checkLabelSize(svg, donutHoleRadius, 16);
+
+            let middleLabelHeight =  svg.select("#middleLabel").node().getBBox().height + svg.select("#middleLabel").node().getBBox().y;
+            svg.select("#middleLabel")
+                .attr("y", (middleLabelHeight*-1))
+                .transition()
+                .duration(1000)
+                    .attr("opacity", 1);
+
+            resetMiddleLabelValueOver(svg, middleLabelHeight, d.data[value]);
+            checkBottomLabelSize(svg, donutHoleRadius)
+
+            svg.select("#middleLabelValue")
+                .transition()
+                .duration(1000)
+                    .attr("opacity", 1);
+        }
+
+        function resetLabelDefault(svg, value, donutHoleRadius, total){
+            resetMiddleLabel(svg, ("Total g " + value));
+            checkLabelSize(svg, donutHoleRadius, 16);
+
+            let middleLabelHeight =  svg.select("#middleLabel").node().getBBox().height + svg.select("#middleLabel").node().getBBox().y;
+            svg.select("#middleLabel")
+                .attr("y", (middleLabelHeight*-1))
+                .transition()
+                .duration(1000)
+                    .attr("opacity", 1);
+
+            resetMiddleLabelValueOver(svg, middleLabelHeight, total)
+            checkBottomLabelSize(svg, donutHoleRadius);
+
+            svg.select("#middleLabelValue")
+                .transition()
+                .duration(1000)
+                    .attr("opacity", 1);
+        }
+
+        function drawDonutChart(svg, data_ready, arc, group, color, donutHoleRadius, value, total){
+            let donutChart = svg.append('g').attr("id", "donutChart")
+                .selectAll('path')
+                .data(data_ready)
+                .join('path')
+                    .attr('d', arc)
+                    .attr('fill', function(d,i){
+                        return color(d.data[group]);
+                    })
+                    .attr("stroke", "black")
+                    .style("stroke-width", "2px")
+                    .style("opacity", 1)
+                    .on("mouseover", function(event,d){
+                        console.log("d---------------------------------------- ", d.data[group]);
+                        console.log("event ", event)
+                        console.log("this ", this)
+                        resetLabelArc(svg, d, group, donutHoleRadius, value);
+
+                        svg.select("#donutChart").selectAll('path')
+                            .transition()
+                            .duration(1000)
+                                .style("opacity", 0.5)
+                                .style("stroke-width","2px")
+                        d3.select(this)                        
+                            .transition()
+                            .duration(1000)
+                                .style("opacity", 1)
+                                .style("stroke-width","4px")
+                    })
+                    .on("mouseleave", function(event,d){
+                        resetLabelDefault(svg, value, donutHoleRadius, total);
+
+                        svg.select("#donutChart").selectAll('path')
+                            .transition()
+                            .duration(1000)
+                                .style("opacity", 1)
+                                .style("stroke-width","2px");
+                    });
+            return donutChart;
+        }
+
+        function checkLabelSize(svg, donutHoleRadius, currentFontSize){
+            let y =  svg.select("#middleLabel").node().getBBox().height;
+            let t = Math.asin(y/donutHoleRadius);
+            let xx = donutHoleRadius * Math.cos(t);
+
+            if( svg.select("#middleLabel").node().getComputedTextLength() > xx * 2){
+                console.log("too big");
+                while(svg.select("#middleLabel").node().getComputedTextLength() > xx * 2){
+                    currentFontSize = currentFontSize - 0.5;
+                    svg.select("#middleLabel").style("font-size", currentFontSize + 'px');
+                     y =  svg.select("#middleLabel").node().getBBox().height;
+                     t = Math.asin(y/donutHoleRadius);
+                     xx = donutHoleRadius * Math.cos(t);
+                }
+            }else{
+                console.log("too small");
+                while(svg.select("#middleLabel").node().getComputedTextLength() < xx * 2){
+                    currentFontSize = currentFontSize + 0.5;
+                    svg.select("#middleLabel").style("font-size", currentFontSize + 'px');
+                     y =  svg.select("#middleLabel").node().getBBox().height;
+                     t = Math.asin(y/donutHoleRadius);
+                     xx = donutHoleRadius * Math.cos(t);
+                }
+                currentFontSize = currentFontSize - 0.5;
+                svg.select("#middleLabel").style("font-size", currentFontSize + 'px');
+
+            }
+        }
+
+        function checkBottomLabelSize(svg, donutHoleRadius){
+            let y2 =  svg.select("#middleLabelValue").node().getBBox().height;
+            let t2 = Math.asin(y2/donutHoleRadius);
+            let xx2 = donutHoleRadius * Math.cos(t2);
+            let middleLabelValueCurrentFontSize = +((svg.select("#middleLabelValue").style("font-size")).slice(0,-2))
+            if( svg.select("#middleLabelValue").node().getComputedTextLength() > xx2 * 2){
+                console.log("make smaller", middleLabelValueCurrentFontSize);
+
+                while(svg.select("#middleLabelValue").node().getComputedTextLength() > xx2 * 2){
+                    middleLabelValueCurrentFontSize = middleLabelValueCurrentFontSize - 0.1;
+                    svg.select("#middleLabelValue").style("font-size", middleLabelValueCurrentFontSize + 'px');
+                     y2 =  svg.select("#middleLabelValue").node().getBBox().height;
+                     t2 = Math.asin(y2/donutHoleRadius);
+                     xx2 = donutHoleRadius * Math.cos(t2);
+                }
+
+                svg.select("#middleLabelValue").attr("y", 0)
+                let middleLabelValueHeight =  svg.select("#middleLabelValue").node().getBBox().height + svg.select("#middleLabelValue").node().getBBox().y;
+                svg.select("#middleLabelValue").attr("y", -middleLabelValueHeight + svg.select("#middleLabelValue").node().getBBox().height )
+            }
+        }
+
+        d3.csv(fileName).then(function(data) {
+            let pie = d3.pie()
+                .value( d => +d[value] )
+            let data_ready = pie(data);
+            let total = calculateTotal(data);
+
+            //Draw donut chart
+            let donutChart = drawDonutChart(svg, data_ready, arc, group, color, donutHoleRadius, value, total);
+
+            //Draw label text
+            svg.append("text").attr("id", "middleLabel")
+                .attr("text-anchor", "middle")
+                .text("Total g " + value);
+                //.text("Total long long long long long long long long " + value);
+
+            // svg.append('g').append('line')
+            //     .style("stroke", "green")
+            //     .attr("x1", -width/2 )
+            //     .attr("y1", 0 )
+            //     .attr("x2", width/2)
+            //     .attr("y2", 0)
+            
+            let currentFontSize = 16;
+            checkLabelSize(svg, donutHoleRadius, currentFontSize);
+
+            //Gets label in the middle
+            // let middleLabelHeight =  svg.select("#middleLabel").node().getBBox().height + svg.select("#middleLabel").node().getBBox().y;
+            // svg.select("#middleLabel")
+            //     .attr("y", (middleLabelHeight*-1)/2);
+            // svg.select("#middleLabel")
+            //     .attr("transform", "translate(0," +  (svg.select("#middleLabel").node().getBBox().height - middleLabelHeight)/2 + ")" ); 
+
+            //Shifts the middle label
+            let middleLabelHeight =  svg.select("#middleLabel").node().getBBox().height + svg.select("#middleLabel").node().getBBox().y;
+            svg.select("#middleLabel")
+                .attr("y", (middleLabelHeight*-1));
+
+            //Draw the total calculated initially with same font as label
+            svg.append("text").attr("id", "middleLabelValue")
+                .attr("text-anchor", "middle")
+                .style("font-size", svg.select("#middleLabel").style("font-size"))
+                .attr("y", (middleLabelHeight*-1) + svg.select("#middleLabel").node().getBBox().height )
+                .text(total);
+
+            //Check if bottom label goes over, should rarely occur
+            checkBottomLabelSize(svg, donutHoleRadius)
+        });
+    </script>
+</body>

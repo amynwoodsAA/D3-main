@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style> /* set the CSS */
+    .axisLabel {
+        font: 16px sans-serif;
+    }
+
+    .legendText {
+        font: 12px sans-serif;
+    }
+
+    .legendTextTitle {
+        font: 14px sans-serif;
+        text-decoration: underline;
+        text-anchor: left;
+    }
+
+    #legendDiv {
+        overflow: auto;
+        border: 1px solid;
+        border-color: rgb(70, 68, 68);
+        border-right: none;
+        border-width: 1px;
+
+        float:right;
+        position: relative;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+
+    #donutDiv{
+        float: left;
+    }
+
+    #donutLegendDiv{
+        border: solid;
+        border-color: black;
+        border-width: 1px;
+
+    }
+
+</style>
+<body>
+	
+    <!-- load the d3.js library -->    	
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <script src="live.js"></script>
+
+    <div>
+        <button onclick="update('sales')">Variable 1</button>
+        <button onclick="update('sales2')">Variable 2</button>    
+    </div>
+
+    
+    <script>
+        // set the dimensions of the graph
+        let width = 500;
+        let height = 500;
+
+        //Draw divs
+        let div = d3.select("body").append("div").attr("id", "donutLegendDiv");
+        let divDonut = div.append("div").attr("id", "donutDiv")
+        let divLegend = div.append("div").attr("id", "legendDiv")
+
+        //Define widths and heights
+        let legendWidth = width * 0.3;
+        let legendHeight = height;
+        let donutSVGWidth = width * 0.7;
+        let donutSVGHeight  = height;
+
+        divLegend
+            .style("width", legendWidth +'px')
+            .style("height", legendHeight +'px')
+
+        divDonut
+            .style("width", donutSVGWidth +'px')
+            .style("height", donutSVGHeight +'px')
+                
+        // append the svg object to the divs
+        let svg = divLegend.append("svg")
+            .attr("id", "legendSVG")
+            .attr("width", 10000)
+            .attr("height", 10000)
+
+        let svgDonut = divDonut.append("svg")
+            .attr("id", "donutSVG")
+            .attr("width", donutSVGWidth)
+            .attr("height", donutSVGHeight)
+            .append('g')
+
+        let donutSVGMargin = 0;
+        let marginPercentage = 0.05;
+        if(donutSVGWidth < donutSVGHeight){
+            donutSVGMargin = donutSVGWidth * marginPercentage;
+            donutSVGWidth = donutSVGWidth - donutSVGMargin;
+
+            svgDonut
+                .attr("transform", "translate("+ ((donutSVGWidth/2) + (donutSVGMargin/2)) + "," + donutSVGHeight/2 + ")");
+        }else{
+            donutSVGMargin = donutSVGHeight * marginPercentage;
+            donutSVGHeight = donutSVGHeight - donutSVGMargin;
+
+            svgDonut
+                .attr("transform", "translate("+ donutSVGWidth/2 + "," + ((donutSVGHeight/2)+ (donutSVGMargin/2))  + ")");
+        }
+
+        //Define radius and internal radius
+        let radius = Math.min(donutSVGWidth, donutSVGHeight) / 2;
+        let donutHoleRadius = radius * 0.5;
+
+        //Define color scale
+        let color = d3.scaleOrdinal(['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe', '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3', '#808000', '#ffd8b1', '#000075', '#808080', '#ffffff', '#000000']);
+
+        //Define arc function
+        let arc = d3.arc()
+            .innerRadius(donutHoleRadius)         // This is the size of the donut hole
+            .outerRadius(radius);
+
+        //Append text and g necessary for donut chart
+        let donutChart = svgDonut.append('g').attr("id", "donutChart");
+        let middleLabel = svgDonut.append("text").attr("id", "middleLabel")
+        let middleLableValue = svgDonut.append("text").attr("id", "middleLabelValue")
+
+        //Draw legend
+        const legend = svg.append('g')
+            .attr('class', 'legend');
+
+        //Draw legend Title
+        let legendTitle = legend.append('g')
+            .attr("id", "legendTitle");
+
+        legendTitle
+            .append("text")
+            .attr("class", "legendTextTitle")
+            .text('');
+
+        //Draw legend content
+        let legendContent = legend.append('g')
+            .attr("id", "legendContent")
+
+        let sizeRect = 12;
+
+        function calculateTotal(data, value){
+            /*
+                --------------------------- calculateTotal ---------------------------
+                The function calculates the total value from the data
+
+                --------------------------- Parameters ---------------------------
+                data : Array of Objects
+                value : String, the value name in th csv file
+
+                --------------------------- Return ---------------------------
+                Number, total from the value of the data
+            */
+            let total = 0;
+            data.forEach(function(d,i){
+                total += (+(d[value]));
+            });
+            return total;
+        }
+
+        function resetMiddleLabel(svgDonut, textValue){
+            svgDonut.select("#middleLabel")
+                .attr("y", 0)
+                .attr("text-anchor", "middle")
+                .style("font-size", "16px")
+                .attr("opacity", 0)
+                .text(textValue);
+        }
+
+        function resetMiddleLabelValueOver(svgDonut, middleLabelHeight, textValue){
+            svgDonut.select("#middleLabelValue")
+                .attr("text-anchor", "middle")
+                .style("font-size", svgDonut.select("#middleLabel").style("font-size"))
+                .attr("y", (middleLabelHeight*-1) + svgDonut.select("#middleLabel").node().getBBox().height )
+                .attr("opacity", 0)
+                .text(textValue)
+        }
+
+        function resetLabelArc(svgDonut, d, group, donutHoleRadius, value){
+            resetMiddleLabel(svgDonut, d.data[group]);
+            checkLabelSize(svgDonut, donutHoleRadius, 16);
+
+            let middleLabelHeight =  svgDonut.select("#middleLabel").node().getBBox().height + svgDonut.select("#middleLabel").node().getBBox().y;
+            svgDonut.select("#middleLabel")
+                .attr("y", (middleLabelHeight*-1))
+                .transition()
+                .duration(1000)
+                    .attr("opacity", 1);
+
+            resetMiddleLabelValueOver(svgDonut, middleLabelHeight, d.data[value]);
+            checkBottomLabelSize(svgDonut, donutHoleRadius)
+
+            svgDonut.select("#middleLabelValue")
+                .transition()
+                .duration(1000)
+                    .attr("opacity", 1);
+        }
+
+        function resetLabelDefault(svgDonut, value, donutHoleRadius, total){
+            resetMiddleLabel(svgDonut, ("Total g " + value));
+            checkLabelSize(svgDonut, donutHoleRadius, 16);
+
+            let middleLabelHeight =  svgDonut.select("#middleLabel").node().getBBox().height + svgDonut.select("#middleLabel").node().getBBox().y;
+            svgDonut.select("#middleLabel")
+                .attr("y", (middleLabelHeight*-1))
+                .transition()
+                .duration(1000)
+                    .attr("opacity", 1);
+
+            resetMiddleLabelValueOver(svgDonut, middleLabelHeight, total)
+            checkBottomLabelSize(svgDonut, donutHoleRadius);
+
+            svgDonut.select("#middleLabelValue")
+                .transition()
+                .duration(1000)
+                    .attr("opacity", 1);
+        }
+
+        function drawDonutChart(donutChart, data_ready, arc, group, color, donutHoleRadius, value, total, svgDonut){
+            /*
+                --------------------------- drawDonutChart ---------------------------
+                The function calculates the total value from the data
+
+                --------------------------- Parameters ---------------------------
+                data : Array of Objects
+                value : String, the value name in th csv file
+
+                --------------------------- Return ---------------------------
+                Number, total from the value of the data
+            */
+            donutChart
+                .selectAll('path')
+                .data(data_ready)
+                .join('path')
+                    .attr('fill', function(d,i){
+                        return color(d.data[group]);
+                    })
+                    .attr("stroke", "black")
+                    .style("stroke-width", "2px")
+                    .style("opacity", 1)
+                    .on("mouseover", function(event,d){
+                        resetLabelArc(svgDonut, d, group, donutHoleRadius, value);
+
+                        svgDonut.select("#donutChart").selectAll('path')
+                            .transition()
+                            .duration(1000)
+                                .style("opacity", 0.5)
+                                .style("stroke-width","2px")
+                        d3.select(this)                        
+                            .transition()
+                            .duration(1000)
+                                .style("opacity", 1)
+                                .style("stroke-width","4px")
+                    })
+                    .on("mouseleave", function(event,d){
+                        resetLabelDefault(svgDonut, value, donutHoleRadius, total);
+
+                        svgDonut.select("#donutChart").selectAll('path')
+                            .transition()
+                            .duration(1000)
+                                .style("opacity", 1)
+                                .style("stroke-width","2px");
+                    })
+                    .transition().duration(1000).attr("d", arc);
+        }
+
+        function checkLabelSize(svgDonut, donutHoleRadius, currentFontSize){
+            let y =  svgDonut.select("#middleLabel").node().getBBox().height;
+            let t = Math.asin(y/donutHoleRadius);
+            let xx = donutHoleRadius * Math.cos(t);
+
+            if( svgDonut.select("#middleLabel").node().getComputedTextLength() > xx * 2){
+                // console.log("too big");
+                //Too big
+                while(svgDonut.select("#middleLabel").node().getComputedTextLength() > xx * 2){
+                    currentFontSize = currentFontSize - 0.5;
+                    svgDonut.select("#middleLabel").style("font-size", currentFontSize + 'px');
+                     y =  svgDonut.select("#middleLabel").node().getBBox().height;
+                     t = Math.asin(y/donutHoleRadius);
+                     xx = donutHoleRadius * Math.cos(t);
+                }
+            }else{
+                // console.log("too small");
+                //Too small
+                while(svgDonut.select("#middleLabel").node().getComputedTextLength() < xx * 2){
+                    currentFontSize = currentFontSize + 0.5;
+                    svgDonut.select("#middleLabel").style("font-size", currentFontSize + 'px');
+                     y =  svgDonut.select("#middleLabel").node().getBBox().height;
+                     t = Math.asin(y/donutHoleRadius);
+                     xx = donutHoleRadius * Math.cos(t);
+                }
+                currentFontSize = currentFontSize - 0.5;
+                svgDonut.select("#middleLabel").style("font-size", currentFontSize + 'px');
+            }
+        }
+
+        function checkBottomLabelSize(svgDonut, donutHoleRadius){
+            let y2 =  svgDonut.select("#middleLabelValue").node().getBBox().height;
+            let t2 = Math.asin(y2/donutHoleRadius);
+            let xx2 = donutHoleRadius * Math.cos(t2);
+            let middleLabelValueCurrentFontSize = +((svgDonut.select("#middleLabelValue").style("font-size")).slice(0,-2))
+            if( svgDonut.select("#middleLabelValue").node().getComputedTextLength() > xx2 * 2){
+                //console.log("make smaller", middleLabelValueCurrentFontSize);
+                //Make smaller
+                while(svgDonut.select("#middleLabelValue").node().getComputedTextLength() > xx2 * 2){
+                    middleLabelValueCurrentFontSize = middleLabelValueCurrentFontSize - 0.1;
+                    svgDonut.select("#middleLabelValue").style("font-size", middleLabelValueCurrentFontSize + 'px');
+                     y2 =  svgDonut.select("#middleLabelValue").node().getBBox().height;
+                     t2 = Math.asin(y2/donutHoleRadius);
+                     xx2 = donutHoleRadius * Math.cos(t2);
+                }
+
+                svgDonut.select("#middleLabelValue").attr("y", 0)
+                let middleLabelValueHeight =  svgDonut.select("#middleLabelValue").node().getBBox().height + svgDonut.select("#middleLabelValue").node().getBBox().y;
+                svgDonut.select("#middleLabelValue").attr("y", -middleLabelValueHeight + svgDonut.select("#middleLabelValue").node().getBBox().height )
+            }
+        }
+
+        function getGroup(data, group){
+            /*
+                --------------------------- getGroup ---------------------------
+                The function gets all the values from the group column
+
+                --------------------------- Parameters ---------------------------
+                data : Array of Objects
+                group : String, the group name in th csv file
+
+                --------------------------- Return ---------------------------
+                Array of Strings, all the strings from the group column
+            */
+
+            let arr = [];
+            data.forEach(function(d,i){
+                arr.push(d[group]);
+            })
+            return arr;
+        }
+       
+        function setLegendTitleText(legendTitle, group){
+            /*
+                --------------------------- setLegendTitleText ---------------------------
+                The function sets the legend title text and initial position
+
+                --------------------------- Parameters ---------------------------
+                legendTitle : D3 object text, a g group with a text attribute
+                group : String, the group name in th csv file
+
+                --------------------------- Return ---------------------------
+                D3 object text
+            */
+            legendTitle
+                .select('text')
+                .text(group.toUpperCase())
+                .attr("y", 0);
+
+            return legendTitle
+        }
+
+        function centerLegendTitle(legendTitle, rectMargin, legendTitleHeight, legendTitleShift){
+            /*
+                --------------------------- centerLegendTitle ---------------------------
+                The function puts the title to the left
+
+                --------------------------- Parameters ---------------------------
+                legendTitle : D3 Object, the g group for the legend title
+                rectMargin : Number,  the margin for the rect
+                legendTitleHeight : Number, the height of the legend title
+                legendTitleShift : Number, the pixels account for hanging letters
+            */
+            legendTitle.select("text")
+                .attr("x", rectMargin)
+                //.attr("x", maxWidthLegendSVG/2 )
+                .attr("y", legendTitleHeight - (legendTitleShift));
+        }
+
+        function drawLegendContentRect(lg, color, startingLeftRect, startingHeight, sizeRect, group){
+            /*
+                --------------------------- drawLegendContentRect ---------------------------
+                The function draws the rectangles for the legend
+
+                --------------------------- Parameters ---------------------------
+                lg : D3 Object, a g group for the legend objects
+                color : D3 Color Scale Function, the function used for color
+                startingLeftRect : Number, the left margin for the rect
+                startingHeight : Number, the top margin for the rect starting place
+                sizeRect : Number, the size of the rectangles
+                group : String, the group name in th csv file
+            */
+
+            lg.selectAll('rect').remove();
+            lg.append('rect')
+                .attr('fill', function(d,i){
+                    return color(d.data[group]);
+                })
+                .attr('x',startingLeftRect)
+                .attr("y", function(d,i){ 
+                    //(sizeRect/2) is the margin between the rectangles
+                    return startingHeight + i*(sizeRect+(sizeRect/2))
+                })
+                .attr('width', sizeRect)
+                .attr('height', sizeRect)
+                .attr('stroke', 'black');
+        }
+
+        function drawLegendContentText(lg, sizeRect, startingLeftRect, group){
+            /*
+                --------------------------- drawLegendContentText ---------------------------
+                The function draws the text for the legend content
+
+                --------------------------- Parameters ---------------------------
+                lg : D3 Object, a g group for the legend objects
+                sizeRect : Number, the size of the rectangles
+                startingLeftRect : Number, the left margin for the rect
+                group : String, the group name in th csv file
+            */
+            lg.selectAll('text').remove();
+            let textGroup = lg.append('text')
+                .attr("class", "legendText")
+                .attr('x', sizeRect + (sizeRect/2) + startingLeftRect)
+                .text(function(d,i){
+                    return d.data[group];
+                });
+            return textGroup;
+        }
+
+        function adjustLegendContentText(textLegend, sizeRect, startingHeight, textHeight){
+            /*
+                --------------------------- adjustLegendContentText ---------------------------
+                The function shifts the legend content text, and gets the max text length and
+                the total height of the legend
+
+                --------------------------- Parameters ---------------------------
+                textLegend : D3 Object, a g group for the legend text objects
+                sizeRect : Number, the size of the rectangles
+                startingHeight : Number, the top margin for the rect starting place
+                textHeight : Number, the size of the text in the legend content
+
+                --------------------------- Return ---------------------------
+                Array, maxTextLength : the length of the longest string
+                maxLegendHeight : the total height of the legend
+            */
+            let maxTextLength = 0;
+            let maxlegendHeight = 0;
+            textLegend
+                .attr("y", function(d,i){
+                    if(this.getComputedTextLength() > maxTextLength){
+                        maxTextLength = this.getComputedTextLength();
+                    }
+                    let yShift = sizeRect;
+                    maxlegendHeight = startingHeight + yShift - (textHeight) + i*(sizeRect+(sizeRect/2));
+                    return startingHeight + yShift - (textHeight) + i*(sizeRect+(sizeRect/2));
+                });
+
+            return [maxTextLength, maxlegendHeight];
+        }
+
+        function resetLegendSVGWidthHeight(maxWidthLegendSVG, maxlegendHeight, textHeight, legendTitleHeight){
+            /*
+                --------------------------- resetLegendSVGWidthHeight ---------------------------
+                The function resets the legend SVG width and height to account for overflow scroll bar
+
+                --------------------------- Parameters ---------------------------
+                maxWidthLegendSVG : Number, the max width of the legend svg
+                maxlegendHeight : Number,  the total height of the legend
+                textHeight : Number, the size of the text in the legend content
+                legendTitleHeight : Number, the height of the legend title
+            */
+            d3.select("#legendSVG")
+                .attr("width", maxWidthLegendSVG )
+                .attr("height", maxlegendHeight + textHeight + legendTitleHeight )
+        }
+
+        function checkLegendHeight(maxlegendHeight, textHeight, legendTitleHeight, legendHeight, divLegend){
+            /*
+                --------------------------- checkLegendHeight ---------------------------
+                The function sets the legend div height to max available or min to fit
+                svg height
+
+                --------------------------- Parameters ---------------------------
+                maxlegendHeight : Number,  the total height of the legend
+                textHeight : Number, the size of the text in the legend content
+                legendTitleHeight : Number, the height of the legend title
+                legendHeight : Number, the max height allowed for the legend
+                divLegend : D3 Object, the div object of the legend
+            */
+            if(maxlegendHeight + textHeight + legendTitleHeight < legendHeight){
+                divLegend
+                    .style("height",'')
+            }
+        }
+
+        function shiftLegendContent(legendContent, xTransform, yTransform){
+            /*
+                --------------------------- shiftLegendContent ---------------------------
+                The function translates the legend content 
+
+                --------------------------- Parameters ---------------------------
+                legendContent : D3 object, a g group for legend content
+                xTransform : Number, number to shift x direction
+                yTransform : Number, number to shift y direction
+            */
+            legendContent
+                .attr("transform", "translate(" + xTransform + "," + yTransform + ")");
+        }
+        
+        function checkTitleLongerThanSVG(legendTitle, maxWidthLegendSVG){
+            /*
+                --------------------------- checkTitleLongerThanSVG ---------------------------
+                The function sees if title is longer than the svg
+
+                --------------------------- Parameters ---------------------------
+                legendTitle : D3 object text, a g group with a text attribute
+                maxWidthLegendSVG : Number, the max width of the legend svg
+            */
+            let legendTitleLength = legendTitle.select("text").node().getComputedTextLength();
+
+            if(legendTitleLength > maxWidthLegendSVG){
+                //TODO might be wrong, legend title now anchored left not middle?
+                maxWidthLegendSVG = legendTitleLength;
+                legendTitle.select("text")
+                    .attr("x", maxWidthLegendSVG/2 )
+                d3.select("#legendSVG")
+                    .attr("width", maxWidthLegendSVG )
+            }
+        }
+
+        function drawLegend(legendTitle, group, legendContent, data_ready, color){
+            /*
+                --------------------------- drawLegend ---------------------------
+                The function draws the legend based on the data given
+
+                --------------------------- Parameters ---------------------------
+                legendTitle : D3 object text, a g group with a text attribute
+                group : String, the group name in th csv file
+                legendContent : D3 object , a g group for the legend content
+                data_ready : Array of Objects
+                color : D3 Color Scale Function, the function used for color
+            */
+
+            //Reset the div legend height and width to original
+            divLegend
+                .style("width", legendWidth +'px')
+                .style("height", legendHeight +'px')
+
+            //Sets the legend title text and initial position
+            legendTitle = setLegendTitleText(legendTitle, group)
+
+            //Bind the data, one g group for each group string
+            const lg = legendContent.selectAll('g')
+                .data(data_ready)
+                .join('g');
+            
+            let startingHeight = 0;
+            let startingLeftRect = sizeRect/2;
+            //Draw the rectangles for the legend content
+            drawLegendContentRect(lg, color, startingLeftRect, startingHeight, sizeRect, group);
+            //Draw the text for the legend content
+            let textLegend = drawLegendContentText(lg, sizeRect, startingLeftRect, group)
+
+            let textHeight = lg.selectAll('text').node().getBBox().height + lg.selectAll('text').node().getBBox().y;
+            //Adjust the y attribute of the legend content text
+            let [maxTextLength, maxlegendHeight] = adjustLegendContentText(textLegend, sizeRect, startingHeight, textHeight);
+
+            let legendTitleHeight =  legendTitle.select("text").node().getBBox().height;
+            let legendTitleY = legendTitle.select("text").node().getBBox().y;
+            let legendTitleShift = legendTitleHeight + legendTitleY;
+            let maxWidthLegendSVG =  maxTextLength + sizeRect + (sizeRect/2) + startingLeftRect;
+            let rectMargin = sizeRect/2;
+
+            //Reset the legend SVG width and height to account for overflow scroll bar
+            resetLegendSVGWidthHeight(maxWidthLegendSVG, maxlegendHeight, textHeight, legendTitleHeight + rectMargin + rectMargin)
+            //Sets the legend div height to max available or min to fit svg height
+            checkLegendHeight(maxlegendHeight, lg.selectAll('text').node().getBBox().height, legendTitleHeight, legendHeight, divLegend)
+            //Puts the title to the left
+            centerLegendTitle(legendTitle, rectMargin, legendTitleHeight, legendTitleShift);
+            //Translates the legend content
+            shiftLegendContent(legendContent, 0, legendTitleHeight + rectMargin);
+
+            //Check title is longer then svg
+            checkTitleLongerThanSVG(legendTitle, maxWidthLegendSVG);
+        }
+
+        function minimizeLegendCheck(legendWidth, svg){
+            /*
+                --------------------------- minimizeLegendCheck ---------------------------
+                The function sees if the legend border can be smaller
+
+                --------------------------- Parameters ---------------------------
+                legendWidth : Number, the max width of the legend
+                svg : D3 Object, the legend svg grouping 
+
+                --------------------------- Return ---------------------------
+                Number, the new width max size, otherwise 0
+            */
+            let svgWidth = svg.attr("width");
+            if(svgWidth < legendWidth){
+                return svgWidth;
+            }
+
+            return 0;
+        }
+
+        function minimizeLegend(legendDiff, divLegend){
+            /*
+                --------------------------- minimizeLegendCheck ---------------------------
+                The function makes the legend border smaller
+
+                --------------------------- Parameters ---------------------------
+                legendDiff : Number, the new max width of the legend
+                divLegend : D3 Object, the legend div grouping 
+            */
+            divLegend
+                .style("width", legendDiff +'px');
+        }
+
+        function shiftDonutSVG( marginPercentage, svgDonut){
+            /*
+                --------------------------- shiftDonutSVG ---------------------------
+                The function shifts the donut svg to the new width and height
+
+                --------------------------- Parameters ---------------------------
+                marginPercentage : Number, margin percentage
+                svgDonut : D3 Object, the donut svg grouping 
+            */
+            if(donutSVGWidth < donutSVGHeight){
+                donutSVGMargin = donutSVGWidth * marginPercentage;
+                donutSVGWidth = donutSVGWidth - donutSVGMargin;
+
+                svgDonut
+                .transition()
+                .duration(1000)
+                .attr("transform", "translate("+ ((donutSVGWidth/2) + (donutSVGMargin/2)) + "," + donutSVGHeight/2 + ")");
+            }else{
+                donutSVGMargin = donutSVGHeight * marginPercentage;
+                donutSVGHeight = donutSVGHeight - donutSVGMargin;
+
+                svgDonut
+                .transition()
+                .duration(1000)
+                .attr("transform", "translate("+ donutSVGWidth/2 + "," + ((donutSVGHeight/2)+ (donutSVGMargin/2))  + ")");
+            }
+        }
+        
+        function resetDonutSVGHeightWidthVariables(widthValue, heightValue){
+            /*
+                --------------------------- resetDonutSVGHeightWidthVariables ---------------------------
+                The function changes the global donut svg width and height variables
+
+                --------------------------- Parameters ---------------------------
+                widthValue : Number, the new max width of Donut chart
+                heightValue :  Number, the new max height of Donut chart
+            */
+            donutSVGWidth = widthValue;
+            donutSVGHeight  = heightValue;
+        }
+
+        function resetRadius(){
+            /*
+                --------------------------- shiftDonutSVG ---------------------------
+                The function resets the global radius variables to new width and height
+            */
+            radius = Math.min(donutSVGWidth, donutSVGHeight) / 2;
+            donutHoleRadius = radius * 0.5;
+        }
+
+        function resetArc(){
+            /*
+                --------------------------- shiftDonutSVG ---------------------------
+                The function resets the global arc variable to new radius values
+            */
+            arc = d3.arc()
+                .innerRadius(donutHoleRadius)         // This is the size of the donut hole
+                .outerRadius(radius);
+        }
+
+        function maximizeDonutChart(widthValue, svgDonut){
+            /*
+                --------------------------- maximizeDonutChart ---------------------------
+                The function makes the the donut chart bigger
+
+                --------------------------- Parameters ---------------------------
+                widthValue : Number, the new max width of Donut chart
+                svgDonut : D3 Object, the donut svg grouping 
+            */
+            resetDonutSVGHeightWidthVariables(widthValue, height);
+            divDonut.select("svg")
+                .attr("width", donutSVGWidth)
+
+            donutSVGMargin = 0;
+            marginPercentage = 0.05;
+            shiftDonutSVG( marginPercentage, svgDonut)
+            resetRadius();
+            resetArc();
+        }
+
+        function update(selectedVar){
+            console.log("-----------------UPDATING ", selectedVar);
+            let group = 'salesperson';
+            let value = 'sales';
+            let fileName = 'salesTest.csv';
+            if(selectedVar === "sales2"){
+                group = 'Family';
+                value = '# times to Disneyland';
+                fileName = 'salesTest3.csv';
+            }
+
+            //Reset the legend div width to original 
+            divLegend
+            .style("width", legendWidth +'px')
+
+            d3.csv(fileName).then(function(data){
+                //Define the pie function
+                let pie = d3.pie()
+                    .value( d => +d[value] )
+                let data_ready = pie(data);
+
+                //Get the total value
+                let total = calculateTotal(data, value);
+                //Get the group values
+                let groups = getGroup(data, group);
+                color.domain(groups);
+
+                //Draw the legend
+                drawLegend(legendTitle, group, legendContent, data_ready, color);
+
+                //Minimize legend
+                let legendDiff = minimizeLegendCheck(legendWidth, svg);
+                if(legendDiff !== 0){
+                    minimizeLegend(legendDiff, divLegend);
+                    //Make donut chart larger if posssible
+                    maximizeDonutChart(width - legendDiff, svgDonut);
+                }
+                else{
+                    maximizeDonutChart(width * 0.7, svgDonut);
+                }
+
+                drawDonutChart(svgDonut.select("#donutChart"), data_ready, arc, group, color, donutHoleRadius, value, total, svgDonut);
+                //Redraw middle label
+                resetLabelDefault(svgDonut, value, donutHoleRadius, total)
+
+                div
+                    .style("width", width + 2 +'px')
+                    .style("height", height + 0 +'px')
+
+            });
+        }
+    
+        update("sales")
+    </script>
+</body>
