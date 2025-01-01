@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Arc Diagram</title>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <script src="live.js"></script>
+    <style>
+        /* .blank text,
+        .tick:first-of-type {display: none}
+        text {
+            font-family: 'Yanone Kaffeesatz', sans-serif;
+            font-size: 10pt
+        } */
+    </style>
+</head>
+<body>
+    <script>
+        // set the dimensions and margins of the graph
+        const margin = {top: 20, right: 30, bottom: 20, left: 30},
+        width = 450 - margin.left - margin.right,
+        height = 300 - margin.top - margin.bottom;
+        const minRadius = 3;
+        const maxRadius = 14;
+
+        // append the svg object to the body of the page
+        const svg = d3.select("body")
+        .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+            .attr("transform",
+                "translate(" + margin.left + "," + margin.top + ")");
+
+        let data = {
+            "nodes": [
+                { "id": 1, "name": "Node 1", "count": 60 },
+                { "id": 2, "name": "Node 2", "count": 15 },
+                { "id": 3, "name": "Node 3", "count": 20 },
+                { "id": 4, "name": "Node 4", "count": 25 },
+                { "id": 5, "name": "Node 5", "count": 30 },
+                { "id": 6, "name": "Node 6", "count": 35 },
+                { "id": 7, "name": "Node 7", "count": 40 },
+                { "id": 8, "name": "Node 8", "count": 45 },
+                { "id": 9, "name": "Node 9", "count": 50 },
+                { "id": 10, "name": "Node 10", "count": 55 }
+            ],
+            "links": [
+                { "from": 1, "to": 2, "count": 15 },
+                { "from": 1, "to": 3, "count": 8 },
+                { "from": 2, "to": 4, "count": 12 },
+                { "from": 3, "to": 5, "count": 7 },
+                { "from": 4, "to": 6, "count": 3 },
+                { "from": 5, "to": 7, "count": 10 },
+                { "from": 6, "to": 8, "count": 2 },
+                { "from": 7, "to": 9, "count": 14 },
+                { "from": 8, "to": 10, "count": 6 },
+                { "from": 9, "to": 1, "count": 9 },
+                { "from": 10, "to": 2, "count": 4 },
+                { "from": 3, "to": 7, "count": 11 },
+                { "from": 4, "to": 9, "count": 13 }
+            ]
+            }
+
+        let nodeCounts = data.nodes.map(function(d){
+            let currentCount = 0;
+
+
+            data.links.forEach(function(l1){
+                if(l1.from === d.id){
+                    currentCount += l1.count;
+                }
+            })
+            return currentCount;
+        }
+        )
+        console.log(nodeCounts)
+        console.log(data.nodes.map((d) => d.count))
+        let sorted = [...nodeCounts].sort((a, b) => a - b)
+
+        const nodesIds = data.nodes.map((d) => d.id);
+        const xScale = d3.scalePoint().range([0 , width]).domain(nodesIds);
+        const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(nodesIds)
+        const radiusScale = d3.scalePoint()
+            .range([minRadius, maxRadius])
+            .domain(sorted);
+            //.domain(data.nodes.map((d) => d.count).sort((a, b) => a - b));
+
+            console.log(radiusScale(18))
+
+        //Add the circle for the nodes
+        var nodes = svg
+            .selectAll("mynodes")
+            .data(data.nodes)
+            .enter()
+            .append("circle")
+            .attr("cx", d => xScale(d.id))
+            .attr("cy", height-30)
+            .attr("r", function(d){
+                // d => radiusScale(d.count)
+                let idNum = d.id - 1;
+                let counts = nodeCounts[idNum];
+                console.log("counts ", counts, " ", radiusScale(counts))
+                return radiusScale(counts)
+            })
+            .style("fill",  d => colorScale(d.id))
+            .style("stroke", "black")
+            .style("stroke-width", 2)
+
+        // And give them a label
+        svg
+            .selectAll("mylabels")
+            .data(data.nodes)
+            .enter()
+            .append("text")
+            .attr("x", d => xScale(d.id))
+            .attr("y", height)
+            .text(d => d.id)
+            .style("text-anchor", "middle")
+
+        const getLinks = (xScale) => {
+            const links = data.links;
+
+            const mappedLinks = links.map((d) => {
+                const start = xScale(d.from);
+                const end = xScale(d.to);
+                const inflexion = 1;
+                const inverse = start < end;
+                //const inverse = 0 > 1;
+                let switchInverse = 0;
+
+                if(start < end){
+                    switchInverse = 1;
+                }
+                console.log("inverse ", inverse)
+                return {
+                ...d,
+                inverse,
+                d: [
+                    "M",
+                    start,
+                    height - 30,
+                    "A", // This means we're going to build an elliptical arc
+                    inflexion,
+                    ",", 
+                    inflexion,
+                    ",",
+                    0,
+                    0,
+                    ",",
+                    switchInverse,
+                    end,
+                    ",",
+                    height -30 ,
+                ].join(" "),
+                };
+            });
+            return mappedLinks;
+        };
+
+        var defs = svg.append("defs");
+        function generateConnections() {
+            const connections = [];
+            d3.schemeCategory10.forEach((start) => {
+                d3.schemeCategory10.forEach((end) => {
+                if (start !== end) {
+                    connections.push({
+                    start,
+                    end,
+                    id: `${start}-${end}`,
+                    });
+                }
+                });
+            });
+            return connections;
+        }
+        var connections = generateConnections();
+
+        var gradient = defs.selectAll('mygradients')
+            .data(connections)
+            .enter().append("linearGradient")
+            .attr("id", function (dataPoint) {
+              return dataPoint.id
+            })
+            // .attr("x1", "0%")
+            // .attr("x2", "100%")
+            // .attr("y1", "0%")
+            // .attr("y2", "100%");
+
+        var stop1 = gradient.append("stop")
+            .attr("class", "start")
+            .attr("offset", "5%")
+            .attr("stop-color", function(dataPoint){
+                return dataPoint.start;
+            })
+            .attr("stop-opacity", 1);
+
+        var stop2 = gradient.append("stop")
+            .attr("class", "end")
+            .attr("offset", "95%")
+            .attr("stop-color", function(dataPoint){
+                return dataPoint.end;
+            })
+            .attr("stop-opacity", 1);
+
+        let calculatedLinks = getLinks(xScale);
+        console.log(calculatedLinks)
+        const minThickness = 3;
+        const maxThickness = 11;
+        const lineThickness = d3.scalePoint()
+            .range([minThickness, maxThickness])
+            .domain(calculatedLinks.map((d) => d.count).sort((a, b) => a - b));
+
+        var links = svg
+            .selectAll('mylinks')
+            .data(calculatedLinks)
+            .enter()
+            .append('path')
+            .attr('d', function (dataPoint) {
+              return dataPoint.d
+            })
+            // .style("stroke", function(dataPoint){
+            //     console.log( colorScale(dataPoint.from) - colorScale(dataPoint.to))
+            //     return colorScale(dataPoint.from)
+            // })
+            .style("stroke", function(dataPoint){
+                console.log( dataPoint)
+                var beginColor = colorScale(dataPoint.from);
+                var endColor = colorScale(dataPoint.to)
+                if(dataPoint.inverse === false){
+                    beginColor = colorScale(dataPoint.to);
+                    endColor = colorScale(dataPoint.from);
+                }
+                return "url(#" + beginColor + "-" + endColor + ")"
+            })
+            .style("fill", "none")
+            .style("stroke-width", function (dataPoint) {
+                console.log(lineThickness(dataPoint.count) )
+              return lineThickness(dataPoint.count) 
+            })
+
+            nodes.raise();
+
+
+        // Read dummy data
+        // d3.json("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/data_network.json").then(function(data) {
+
+        //     // List of node names
+        //     var allNodes = data.nodes.map(d => d.name)
+
+        //     // A linear scale to position the nodes on the X axis
+        //     var x = d3.scalePoint()
+        //         .range([0, width])
+        //         .domain(allNodes)
+
+        //     // Add the circle for the nodes
+        //     var nodes = svg
+        //         .selectAll("mynodes")
+        //         .data(data.nodes)
+        //         .enter()
+        //         .append("circle")
+        //         .attr("cx", d => x(d.name))
+        //         .attr("cy", height-30)
+        //         .attr("r", 8)
+        //         .style("fill", "#69b3a2")
+
+        //     // And give them a label
+        //     svg
+        //         .selectAll("mylabels")
+        //         .data(data.nodes)
+        //         .enter()
+        //         .append("text")
+        //         .attr("x", d => x(d.name))
+        //         .attr("y", height-10)
+        //         .text(d => d.name)
+        //         .style("text-anchor", "middle")
+
+        //     // Add links between nodes. Here is the tricky part.
+        //     // In my input data, links are provided between nodes -id-, NOT between node names.
+        //     // So I have to do a link between this id and the name
+        //     var idToNode = {};
+        //     data.nodes.forEach(node =>
+        //         idToNode[node.id] = node
+        //     );
+        //     // Cool, now if I do idToNode["2"].name I've got the name of the node with id 2
+
+        //     // Add the links
+        //     //  A rx ry x-axis-rotation large-arc-flag sweep-flag x y
+        //     var links = svg
+        //         .selectAll('mylinks')
+        //         .data(data.links)
+        //         .enter()
+        //         .append('path')
+        //         .attr('d', function (d) {
+        //             start = x(idToNode[d.source].name)    // X position of start node on the X axis
+        //             end = x(idToNode[d.target].name)      // X position of end node
+        //             return ['M', start, height-30,    // the arc starts at the coordinate x=start, y=height-30 (where the starting node is)
+        //                 'A',                            // This means we're gonna build an elliptical arc
+        //                 (start - end)/2, ',',    // Next 2 lines are the coordinates of the inflexion point. Height of this point is proportional with start - end distance
+        //                 (start - end)/2, 0, 0, ',',
+        //                 start < end ? 1 : 0, end, ',', height-30] // We always want the arc on top. So if end is before start, putting 0 here turn the arc upside down.
+        //                 .join(' ');
+        //         })
+        //         .style("fill", "none")
+        //         .style("stroke", "black")
+
+        //         // Add the highlighting functionality
+        //         nodes
+        //             .on('mouseover', function (event, d) {
+        //                 // Highlight the nodes: every node is green except of him
+        //                 nodes.style('fill', "#B8B8B8")
+        //                 d3.select(this).style('fill', '#69b3b2')
+        //                 // Highlight the connections
+        //                 links
+        //                     .style('stroke', function (link_d) { return link_d.source === d.id || link_d.target === d.id ? '#69b3b2' : '#b8b8b8';})
+        //                     .style('stroke-width', function (link_d) { return link_d.source === d.id || link_d.target === d.id ? 4 : 1;})
+        //             })
+        //             .on('mouseout', function (event, d) {
+        //                 nodes.style('fill', "#69b3a2")
+        //                 links
+        //                     .style('stroke', 'black')
+        //                     .style('stroke-width', '1')
+        //             });
+        // })
+       
+
+    </script>
+</body>
+</html>
